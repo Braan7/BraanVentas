@@ -1,66 +1,94 @@
-from flask_sqlalchemy import SQLAlchemy
-from flask_migrate import Migrate
 from datetime import datetime
+from flask_sqlalchemy import SQLAlchemy
+from flask_login import LoginManager, UserMixin
+from flask_migrate import Migrate
+
 db = SQLAlchemy()
-migrate = Migrate()
+login_manager = LoginManager()
+migrate = None  # will be set in attach_db
+
 def attach_db(app):
+    global migrate
     db.init_app(app)
-    migrate.init_app(app, db)
-class User(db.Model):
+    login_manager.init_app(app)
+    login_manager.login_view = "auth.login"
+    migrate = Migrate(app, db)
+
+@login_manager.user_loader
+def load_user(user_id):
+    return User.query.get(int(user_id))
+
+# --- Models ---
+class User(db.Model, UserMixin):
     id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(50), unique=True, nullable=False)
+    username = db.Column(db.String(60), unique=True, nullable=False)
     email = db.Column(db.String(120), unique=True, nullable=False)
     password_hash = db.Column(db.String(255), nullable=False)
-    role = db.Column(db.String(20), default="client")
-    saldo = db.Column(db.Numeric(12,2), default=0)
+    is_admin = db.Column(db.Boolean, default=False)
+    wallet_balance = db.Column(db.Numeric(12,2), default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-class Categoria(db.Model):
+
+class Category(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    nombre = db.Column(db.String(100), nullable=False)
-    activa = db.Column(db.Boolean, default=True)
-class Producto(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    categoria_id = db.Column(db.Integer, db.ForeignKey('categoria.id'), nullable=False)
-    nombre = db.Column(db.String(150), nullable=False)
-    descripcion = db.Column(db.Text, default="")
-    precio = db.Column(db.Numeric(12,2), nullable=False)
+    name = db.Column(db.String(120), unique=True, nullable=False)
     visible = db.Column(db.Boolean, default=True)
-    categoria = db.relationship('Categoria', backref='productos')
-class Pedido(db.Model):
+
+class Product(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    total = db.Column(db.Numeric(12,2), nullable=False)
-    metodo_pago = db.Column(db.String(30))
-    estado = db.Column(db.String(20), default="pendiente")
-    extras_json = db.Column(db.Text, default="{}")
+    category_id = db.Column(db.Integer, db.ForeignKey("category.id"), nullable=False)
+    name = db.Column(db.String(150), nullable=False)
+    price_mx = db.Column(db.Numeric(12,2), nullable=False)
+    stock = db.Column(db.Integer, default=0)  # para PINES/servicios que lo requieran
+    active = db.Column(db.Boolean, default=True)
+
+class CartItem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey("product.id"), nullable=False)
+    qty = db.Column(db.Integer, default=1)
+    ff_player_id = db.Column(db.String(32))   # Free Fire ID
+    ff_player_name = db.Column(db.String(64))
+
+class Order(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    status = db.Column(db.String(20), default="pending")  # pending, processing, done, rejected
+    method = db.Column(db.String(20))  # wallet / binance
+    total_mx = db.Column(db.Numeric(12,2), default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    user = db.relationship('User', backref='pedidos')
-class PedidoItem(db.Model):
+
+class OrderItem(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    pedido_id = db.Column(db.Integer, db.ForeignKey('pedido.id'), nullable=False)
-    producto_id = db.Column(db.Integer, db.ForeignKey('producto.id'), nullable=False)
-    cantidad = db.Column(db.Integer, default=1)
-    precio_unitario = db.Column(db.Numeric(12,2), nullable=False)
-class Recarga(db.Model):
+    order_id = db.Column(db.Integer, db.ForeignKey("order.id"), nullable=False)
+    product_id = db.Column(db.Integer, db.ForeignKey("product.id"), nullable=False)
+    qty = db.Column(db.Integer, default=1)
+    unit_price_mx = db.Column(db.Numeric(12,2), nullable=False)
+    ff_player_id = db.Column(db.String(32))
+    ff_player_name = db.Column(db.String(64))
+
+class TopUp(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    monto = db.Column(db.Numeric(12,2), nullable=False)
-    metodo = db.Column(db.String(50))
-    estado = db.Column(db.String(20), default="pendiente")
-    comprobante_url = db.Column(db.String(255), default="")
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    amount_mx = db.Column(db.Numeric(12,2), nullable=False)
+    method = db.Column(db.String(30))  # oxxo_qr / binance / btc / ltc
+    status = db.Column(db.String(20), default="pending")  # pending, approved, rejected
+    proof_url = db.Column(db.String(300))
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
-    user = db.relationship('User', backref='recargas')
-class Cupon(db.Model):
+
+class Coupon(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    codigo = db.Column(db.String(40), unique=True, nullable=False)
-    porcentaje = db.Column(db.Integer, default=0)
-    max_uso = db.Column(db.Integer, default=1)
-    usado = db.Column(db.Integer, default=0)
-    activo = db.Column(db.Boolean, default=True)
+    code = db.Column(db.String(40), unique=True, nullable=False)
+    discount_mx = db.Column(db.Numeric(12,2), default=0)
+    used_by = db.Column(db.Integer)   # once per user (validado en app)
+
 class Ticket(db.Model):
     id = db.Column(db.Integer, primary_key=True)
-    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
-    asunto = db.Column(db.String(150), nullable=False)
-    mensaje = db.Column(db.Text, nullable=False)
-    estado = db.Column(db.String(20), default="abierto")
+    user_id = db.Column(db.Integer, db.ForeignKey("user.id"), nullable=False)
+    subject = db.Column(db.String(160), nullable=False)
+    message = db.Column(db.Text, nullable=False)
+    status = db.Column(db.String(20), default="open")  # open/closed
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+class Setting(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    maintenance_mode = db.Column(db.Boolean, default=False)
