@@ -1,0 +1,66 @@
+from flask_sqlalchemy import SQLAlchemy
+from flask_migrate import Migrate
+from datetime import datetime
+db = SQLAlchemy()
+migrate = Migrate()
+def attach_db(app):
+    db.init_app(app)
+    migrate.init_app(app, db)
+class User(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    username = db.Column(db.String(50), unique=True, nullable=False)
+    email = db.Column(db.String(120), unique=True, nullable=False)
+    password_hash = db.Column(db.String(255), nullable=False)
+    role = db.Column(db.String(20), default="client")
+    saldo = db.Column(db.Numeric(12,2), default=0)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+class Categoria(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    nombre = db.Column(db.String(100), nullable=False)
+    activa = db.Column(db.Boolean, default=True)
+class Producto(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    categoria_id = db.Column(db.Integer, db.ForeignKey('categoria.id'), nullable=False)
+    nombre = db.Column(db.String(150), nullable=False)
+    descripcion = db.Column(db.Text, default="")
+    precio = db.Column(db.Numeric(12,2), nullable=False)
+    visible = db.Column(db.Boolean, default=True)
+    categoria = db.relationship('Categoria', backref='productos')
+class Pedido(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    total = db.Column(db.Numeric(12,2), nullable=False)
+    metodo_pago = db.Column(db.String(30))
+    estado = db.Column(db.String(20), default="pendiente")
+    extras_json = db.Column(db.Text, default="{}")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    user = db.relationship('User', backref='pedidos')
+class PedidoItem(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    pedido_id = db.Column(db.Integer, db.ForeignKey('pedido.id'), nullable=False)
+    producto_id = db.Column(db.Integer, db.ForeignKey('producto.id'), nullable=False)
+    cantidad = db.Column(db.Integer, default=1)
+    precio_unitario = db.Column(db.Numeric(12,2), nullable=False)
+class Recarga(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    monto = db.Column(db.Numeric(12,2), nullable=False)
+    metodo = db.Column(db.String(50))
+    estado = db.Column(db.String(20), default="pendiente")
+    comprobante_url = db.Column(db.String(255), default="")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    user = db.relationship('User', backref='recargas')
+class Cupon(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    codigo = db.Column(db.String(40), unique=True, nullable=False)
+    porcentaje = db.Column(db.Integer, default=0)
+    max_uso = db.Column(db.Integer, default=1)
+    usado = db.Column(db.Integer, default=0)
+    activo = db.Column(db.Boolean, default=True)
+class Ticket(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('user.id'), nullable=False)
+    asunto = db.Column(db.String(150), nullable=False)
+    mensaje = db.Column(db.Text, nullable=False)
+    estado = db.Column(db.String(20), default="abierto")
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)

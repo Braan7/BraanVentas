@@ -1,0 +1,1 @@
+{% extends 'base.html' %}{% block content %}<h3>Pedido #{{ pedido.id }}</h3><p>Estado: {{ pedido.estado }}</p><p>Total: ${{ '%.2f'|format(pedido.total) }}</p><a class='btn btn-primary' href='/'>Volver</a>{% endblock %}
